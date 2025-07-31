@@ -153,6 +153,7 @@ export const toolbox = {
         { "kind": "block", "type": "text_join" },
         { "kind": "block", "type": "addText" },
         { "kind": "block", "type": "clearText" },
+        { "kind": "block", "type": "promptText" },
         {
           "kind": "block",
           "type": "text_append",

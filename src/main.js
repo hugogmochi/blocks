@@ -148,18 +148,26 @@ function promptText(promptMessage) {
     });
 }
 
-console.log(await promptText('¿Como te llamas?'))
-
 const runButton = document.getElementById('runbutton')
 
-runButton.addEventListener('click', (e) => {
+runButton.addEventListener('click', async (e) => {
   clearText(); // Limpiar la salida antes de ejecutar
   const code = javascriptGenerator.workspaceToCode(workspace);
 
+  console.log(code)
+
   try {
-    // Ejecuta el código
-    // eslint-disable-next-line no-eval
-    eval(code);
+    eval(`
+      (async () => {
+        try {
+          ${code}
+        } catch (error) {
+          console.error('Error en el código generado:', error);
+          addText('Error en el código generado: ' + error.message);
+        }
+      })();
+    `);
+    
   } catch (e) {
     console.error('Error al ejecutar el código:', e);
     addText('Error de ejecución: ' + e.message);
