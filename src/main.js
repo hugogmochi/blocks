@@ -111,6 +111,45 @@ function clearText() {
   outElement.textContent = ''
 }
 
+function promptText(promptMessage) {
+    return new Promise((resolve) => {
+        // 1. Display the prompt message
+        outElement.textContent += promptMessage + ' '; // Use promptMessage here, not 'text'
+
+        // 2. Create the input element
+        const inElement = document.createElement('input');
+        inElement.type = 'text';
+        inElement.placeholder = 'Escribe tu respuesta y presiona Enter...'; // Give user a hint
+        inElement.style.display = 'block'; // Ensure it's visible, maybe add some styling later
+        inElement.style.marginTop = '10px'; // Just for basic spacing
+
+        // 3. Append the input element to the output area
+        outElement.appendChild(inElement);
+
+        // 4. Set focus to the input field so the user can type immediately
+        inElement.focus();
+
+        // 5. Add event listener for 'Enter' key
+        inElement.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent potential form submission or other default behavior
+
+                const inputValue = inElement.value; // Get the value before removing
+
+                // 6. Remove the input element
+                outElement.removeChild(inElement);
+
+                // 7. Resolve the Promise with the input value
+                // This makes the function return the value and allows the 'await' call to continue
+                addText(inputValue)
+                resolve(inputValue);
+            }
+        });
+    });
+}
+
+console.log(await promptText('¿Como te llamas?'))
+
 const runButton = document.getElementById('runbutton')
 
 runButton.addEventListener('click', (e) => {
