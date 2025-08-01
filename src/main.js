@@ -12,9 +12,12 @@ import 'blockly/blocks';
 
 import { toolbox } from './toolbox'
 import './style.css'
+import executeWorker from  './code-executer?worker'
 
 //Cambiar lenguaje al español
 Blockly.setLocale(es)
+
+console.log('AAA')
 
 // Creamos una clase a partir del toolbox category para añadir estilos personalizados
 class CustomCategory extends Blockly.ToolboxCategory {
@@ -112,43 +115,104 @@ function clearText() {
 }
 
 function promptText(promptMessage) {
-    return new Promise((resolve) => {
-        // 1. Display the prompt message
-        outElement.textContent += promptMessage + ' '; // Use promptMessage here, not 'text'
+  return new Promise((resolve) => {
+    // 1. Display the prompt message
+    outElement.textContent += promptMessage + ' '; // Use promptMessage here, not 'text'
 
-        // 2. Create the input element
-        const inElement = document.createElement('input');
-        inElement.type = 'text';
-        inElement.placeholder = 'Escribe tu respuesta y presiona Enter...'; // Give user a hint
-        inElement.style.display = 'block'; // Ensure it's visible, maybe add some styling later
-        inElement.style.marginTop = '10px'; // Just for basic spacing
+    // 2. Create the input element
+    const inElement = document.createElement('input');
+    inElement.type = 'text';
+    inElement.placeholder = 'Escribe tu respuesta y presiona Enter...'; // Give user a hint
+    inElement.style.display = 'block'; // Ensure it's visible, maybe add some styling later
+    inElement.style.marginTop = '10px'; // Just for basic spacing
 
-        // 3. Append the input element to the output area
-        outElement.appendChild(inElement);
+    // 3. Append the input element to the output area
+    outElement.appendChild(inElement);
 
-        // 4. Set focus to the input field so the user can type immediately
-        inElement.focus();
+    // 4. Set focus to the input field so the user can type immediately
+    inElement.focus();
 
-        // 5. Add event listener for 'Enter' key
-        inElement.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Prevent potential form submission or other default behavior
+    // 5. Add event listener for 'Enter' key
+    inElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault(); // Prevent potential form submission or other default behavior
 
-                const inputValue = inElement.value; // Get the value before removing
+        const inputValue = inElement.value; // Get the value before removing
 
-                // 6. Remove the input element
-                outElement.removeChild(inElement);
+        // 6. Remove the input element
+        outElement.removeChild(inElement);
 
-                // 7. Resolve the Promise with the input value
-                // This makes the function return the value and allows the 'await' call to continue
-                addText(inputValue)
-                resolve(inputValue);
-            }
-        });
+        // 7. Resolve the Promise with the input value
+        // This makes the function return the value and allows the 'await' call to continue
+        addText(inputValue)
+        resolve(inputValue);
+      }
     });
+  });
 }
 
+const worker = new executeWorker();
+let requestMap = new Map();
+
+worker.onmessage = async (event) => {
+  const { type, requestId, payload } = event.data;
+
+  switch (type) {
+    case 'addText':
+      addText(payload.text);
+      break;
+    case 'clearText':
+      clearText();
+      break;
+    case 'promptText':
+      try {
+        const userInput = await promptText(payload.promptMessage);
+        worker.postMessage({ type: 'response', requestId, result: userInput });
+      } catch (error) {
+        console.error(error)
+      }
+      break;
+    case 'log':
+      console.log(payload.message)
+    case 'loerror':
+      console.error(payload.message)
+  }
+
+  if (requestMap.has(requestId)) {
+    const { resolve, reject } = requestMap.get(requestId);
+    if (data.type === 'result') {
+      resolve(data.result);
+    } else {
+      reject(new Error(data.message));
+    }
+    requestMap.delete(requestId);
+  }
+};
+
+
 const runButton = document.getElementById('runbutton')
+
+function executeCodeInWorker(code) {
+  return new Promise((resolve, reject) => {
+    const requestId = Math.random().toString(36).substring(2, 9);
+
+    const handleMessage = (event) => {
+      if (event.data.requestId === requestId) {
+        worker.removeEventListener('message', handleMessage);
+        if (event.data.type === 'result') {
+          resolve(event.data.result);
+        } else if (event.data.type === 'error') {
+          reject(new Error(event.data.message));
+        } else {
+          resolve()
+        }
+      }
+    };
+    worker.addEventListener('message', handleMessage);
+
+    worker.postMessage({ type: 'execute', code, requestId });
+  });
+}
 
 runButton.addEventListener('click', async (e) => {
   clearText(); // Limpiar la salida antes de ejecutar
@@ -157,17 +221,8 @@ runButton.addEventListener('click', async (e) => {
   console.log(code)
 
   try {
-    eval(`
-      (async () => {
-        try {
-          ${code}
-        } catch (error) {
-          console.error('Error en el código generado:', error);
-          addText('Error en el código generado: ' + error.message);
-        }
-      })();
-    `);
-    
+    executeCodeInWorker(code)
+
   } catch (e) {
     console.error('Error al ejecutar el código:', e);
     addText('Error de ejecución: ' + e.message);
@@ -198,8 +253,6 @@ function removeFileExtension(filename) {
   const lastDotIndex = filename.lastIndexOf('.');
 
   // If there's no dot, or the dot is the first character (e.g., ".bashrc"),
-  // then there's no extension to remove, so return the original filename.
-  // Also handles cases like "file_without_extension"
   if (lastDotIndex === -1 || lastDotIndex === 0) {
     return filename;
   }
@@ -209,9 +262,9 @@ function removeFileExtension(filename) {
 }
 
 loadButton.addEventListener('click', (e) => {
-    if (confirm('Va ha perder todos los datos no guardados si quiere cargar. Continuar?')) {
-      loadFileSelcetor.click()
-    }
+  if (confirm('Va ha perder todos los datos no guardados si quiere cargar. Continuar?')) {
+    loadFileSelcetor.click()
+  }
 })
 
 loadFileSelcetor.addEventListener('change', async (event) => {
@@ -245,8 +298,8 @@ function clearBlocklyWorkspaceAndAlert(workspace) {
   }
 
   if (confirm('Seguro que quiere limpiar el espacio de trabajo. Va a perder los datos no guardados')) {
-  workspace.clear();
-}
+    workspace.clear();
+  }
 }
 
 const clearButton = document.getElementById('clearprojectbutton')
@@ -257,11 +310,11 @@ clearButton.addEventListener('click', (e) => {
 
 
 // --- Lógica principal para la alerta al cerrar/recargar ---
-window.onbeforeunload = function() {
-    // Si hay cambios sin guardar, devuelve una cadena de texto.
-    // El texto exacto de esta cadena no será mostrado por la mayoría de los navegadores modernos,
-    // pero el hecho de que devuelvas algo activará la alerta genérica del navegador.
-        return "¿Estás seguro de que quieres salir? Perderas datos sin guardar.";
+window.onbeforeunload = function () {
+  // Si hay cambios sin guardar, devuelve una cadena de texto.
+  // El texto exacto de esta cadena no será mostrado por la mayoría de los navegadores modernos,
+  // pero el hecho de que devuelvas algo activará la alerta genérica del navegador.
+  return "¿Estás seguro de que quieres salir? Perderas datos sin guardar.";
 
 };
 
