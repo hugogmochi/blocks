@@ -57,7 +57,7 @@ self.onmessage = async (event) => {
       })()`);
 
      await func(addText, clearText, promptText);
-     console.log(complete)
+     console.log('complete')
 
     } catch (error) {
       console.error(error)
